@@ -253,6 +253,7 @@ Coupon Code: udemystudent1118
 #### How to create own images ?
 
 Here we will take example of a simple webapplication made in flask.
+Link : <https://github.com/mmumshad/simple-webapp-flask>
 
 1. Start with an OS like Ubuntu
 2. Update the source repositories using "apt" command
@@ -266,10 +267,11 @@ Keeping all the above instructions in mind we will create a Dockerfile :
 ```Dockerfile
 FROM Ubuntu
 
-RUN apt-get update && apt-get -y install
-RUN pip install flask flask-mysql
+RUN apt-get update && apt-get -y install python3 python3-setuptools python3-dev build-essential python3-pip python3-mysqldb
+RUN pip3 install flask flask-mysql
 
-COPY . /opt/source-code
+COPY app.py /opt/source-code
+
 ENTRYPOINT FLASK_APP=/opt/source-code/app.py flask run
 ```
 
@@ -294,5 +296,105 @@ The instructions say Docker to perform a specific task whehn it is building the 
 
 4. ENTRYPOINT -- Specifies a command that will be run when the image is run as a container.
 
-When docker builds these images it builds them in a layered architecture.
+When docker builds these images it builds them in a layered architecture. Each line of instruction creates a new layer in the docker image with just the changes from the previous layer.
+
+![Image for layerd architecture](LayeredArchitecture.png)
+
+We can see the same if we do:
+
+```shell
+docker history <image_name>
+```
+
+![Image for layerd architecture](LayeredArchitecture2.png)
+
+All the layers built are cached by docker, so in case if a particular step fails then on rerunning it will reuse the latest build layer in the cache and  continue to build the remaining layers.
+The same is true if we were to add addition al steps to the Dockerfile, this way rebuilding our image is faster. Helpful during update of applications.
+
+#### Demo - Creating our own  docker image
+
+We will be using the following code as an application that needs to be deployed
+LINK: <https://github.com/mmumshad/simple-webapp-flask>
+
+First we will run and check everything on the local system:
+
+1. Get the base image and create a bash session to make an environment.
+
+   ```shell
+      docker run -it ubuntu bash
+   ```
+
+   This will create a ubuntu container with the bash terminal session.
+   Now inside the terminal we will do the following
+
+   ```shell
+   apt-get update
+   apt-get install -y python3 python3-setuptools python3-dev build-essential python3-pip python3-mysqldb
+   pip3 install flask
+   pip3 install flask-mysql
+   cat > /opt/app.py
+   ```
+
+   Then we copy the code:
+
+   ```python
+   import os
+   from flask import Flask
+   app = Flask(__name__)
+
+   @app.route("/")
+   def main():
+      return "Welcome!"
+
+   @app.route('/how are you')
+   def hello():
+      return 'I am good, how about you?'
+
+   if __name__ == "__main__":
+      app.run(host="0.0.0.0", port=8080)
+   ```
+
+   Again exit the file and type the following in the bash shell
+
+   ```shell
+   cd /opt/
+   FLASK_APP=app.py flask run --host=0.0.0.0
+   ```
+
+   This will deploy the webapp but it will only be accessible by the host system.
+
+2. Thus the Dockerfile is:
+
+   ```Dockerfile
+
+   FROM ubuntu
+   RUN apt-get update && apt-get install -y python3 python3-setuptools python3-dev build-essential python3-pip python3-mysqldb
+   RUN pip3 install flask flask-mysql
+   COPY app.py /opt/
+   ENTRYPOINT FLASK_APP=/opt/app.py flask run --host=0.0.0.0 --port=8080
+
+   ```
+
+   Deploy the same by:
+
+   ```shell
+   docker build . -t mysimple-webapp:latest
+   ```
+
+   Run the container:
+
+   ```shell
+   docker run mysimple-webapp
+   ```
+
+3. Push the image to docker hub
+
+   We first have to login and then build a tagged image with our username and then push it
+
+   ```shell
+   docker login
+   docker build . -t akashchakraborty/kodekloud_simple_webapp:pushversion 
+   docker push akashchakraborty/kodekloud_simple_webapp:pushversion
+   ```
+
 
