@@ -397,4 +397,43 @@ First we will run and check everything on the local system:
    docker push akashchakraborty/kodekloud_simple_webapp:pushversion
    ```
 
+#### Environment Variables
 
+Say there is a single piece of web application written in python "app.py"
+
+![Image for application code](app.py_env_var.png)
+
+In this code there is:
+
+```python
+color = 'red'
+```
+
+This will set the background color to red. However if we decide to change the color in future, we will have to change the application code.
+Thus it is a best practice to move such information out of the application code and into an environment variable:
+
+```python
+color = os.environ.get('APP_COLOR')
+```
+
+So next time when we run the application we can set an environment variable:
+
+```shell
+export APP_COLOR = blue; python app.py
+```
+
+To set this environment variable while running a container based on the image of this app, we do:
+
+```shell
+docker run -e APP_COLOR=blue <image-name>
+```
+
+Now, the question is how do we find the env variable set in a container that is already running. We can do that while doing docker inspect.
+
+![Image for docker inspect environment variable](InspectingEnvVar.png)
+
+NOTE: To know the env field from within a webapp container, run:
+
+```shell
+docker exec -it webapp env
+```
