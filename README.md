@@ -437,3 +437,119 @@ NOTE: To know the env field from within a webapp container, run:
 ```shell
 docker exec -it webapp env
 ```
+
+#### Command vs Entrypoint
+
+As we know, a container only lives as long as the process inside it.
+So we need to see who defines what process is run within the container.
+
+```Dockerfile
+#Pull base image.
+FROM ubuntu:14.04
+
+# Install.
+RUN \
+  sed -i 's/# \(.*multiverse$\)/\1/g' /etc/apt/sources.list && \
+  apt-get update && \
+  apt-get -y upgrade && \
+  apt-get install -y build-essential && \
+  apt-get install -y software-properties-common && \
+  apt-get install -y byobu curl git htop man unzip vim wget && \
+  rm -rf /var/lib/apt/lists/*
+
+# Add files.
+ADD root/.bashrc /root/.bashrc
+ADD root/.gitconfig /root/.gitconfig
+ADD root/.scripts /root/.scripts
+
+# Set environment variables.
+ENV HOME /root
+
+# Define working directory.
+WORKDIR /root
+
+# Define default command.
+CMD ["bash"]
+```
+
+The above is the example of the Dockerfile of the ubuntu image. The instruction called "CMD" , which defines the program that will run when the container starts. When this container starts, it will run the bash command. Now bash is not really a process, it is a shell that listens to inputs from a terminal and if it cannot find a terminal then it stops and container exits. By default, docker does not attach a terminal to a container when it is run.
+
+Thus we need to specify a diff command to start the container:
+
+1. Append a command to the Docker run command.  eg. Docker run ubuntu sleep 5
+2. Making a above change permanent:
+   We will have to create a new image with the base ubuntu image and specify the additional command:
+
+   ```Dockerfile
+   FROM Ubuntu
+   CMD sleep 5
+   ```
+
+   The format:
+   CMD command param1 --> CMD sleep 5
+   CMD ["command","param1"] --> CMD ["sleep","5"]
+
+   Now, we build the image as "ubuntu-sleeper" if we want to run sleep for 10 sec then:
+
+   ```shell
+   docker run ubuntu-sleeper sleep 10
+   ```
+
+   Thus the above command that will run at startup is : sleep 10
+   But we would not want something like this, what we want is more like:
+
+   ```shell
+   docker run ubuntu-sleeper 10
+   ```
+
+   We only want to pass in the parameter, in this case the number of seconds and the sleep sommand should be invoked automatically.
+
+This is where ENTRYPOINT comes into action.
+
+This instruction is same as the CMD instruction and whatever we specify in the commandline will get appended to teh ENTRYPOINT.
+
+```Dockerfile
+FROM Ubuntu
+ENTRYPOINT ["sleep"]
+```
+
+So now if we make the image and do:
+
+```shell
+docker run ubuntu-sleeper 10
+```
+
+It will be same as:
+
+```shell
+docker run ubuntu-sleeper sleep 10
+```
+
+Thus in case of CMD instruction, the command line parameters passed will get replaced entirely whereas in case of ENTRYPOINT command line parameters will get appended.
+
+Now, if we have the ENTRYPOINT related image and run it without giving a parameter, then it will give us an error.
+
+```shell
+docker run ubuntu-sleeper
+```
+
+So, we need to give a default value to it as well by appending CMD instruction to the ENTRYPOINT instruction.
+
+```Dockerfile
+FROM Ubuntu
+ENTRYPOINT ["sleep"]
+CMD ["5"]
+```
+
+Now if we do:
+
+```shell
+docker run ubuntu-sleeper
+```
+
+Then it will take sleep 5 as a default one, however, if we specify a prameter, then it will override the CMD instructions parameter.
+We can also override the ENTRYPOINT command:
+
+```shell
+docker run --entrypoint sleep2.0 ubuntu-sleeper 10
+```
