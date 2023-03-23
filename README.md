@@ -248,9 +248,9 @@ Coupon Code: udemystudent1118
    docker logs <container_name>
    ```
 
-### Docker Images
+## Docker Images
 
-#### How to create own images ?
+### How to create own images ?
 
 Here we will take example of a simple webapplication made in flask.
 Link : <https://github.com/mmumshad/simple-webapp-flask>
@@ -506,7 +506,7 @@ Thus we need to specify a diff command to start the container:
 
 This is where ENTRYPOINT comes into action.
 
-This instruction is same as the CMD instruction and whatever we specify in the commandline will get appended to teh ENTRYPOINT.
+This instruction is same as the CMD instruction and whatever we specify in the commandline will get appended to the ENTRYPOINT.
 
 ```Dockerfile
 FROM Ubuntu
@@ -553,3 +553,330 @@ We can also override the ENTRYPOINT command:
 ```shell
 docker run --entrypoint sleep2.0 ubuntu-sleeper 10
 ```
+
+## Docker Compose
+
+If we needed to setup a complex application running multiple services, a better way to do it is using docker compose. With docker compose we cpuld create a configuration file in .yml format called "docker-compose.yml" and put together the different services and the options specific to running them in this file. Then we can simply run a docker-compose up command to bring up thr entire appication stack. This is only applicable to running containers on a single docker host.
+
+For better way of understanding we will be using the simple voting application.
+
+![Image for simple voting app](votingappoverview1.png)
+
+
+Let us assume that all images of the application are already built and available on the docke repository.
+
+Starting with the data layer, we will run the redis container.
+
+```shell
+docker run -d --name=redis redis
+```
+
+Next we will deploy the PostgresSQL by running a container for the same.
+
+```shell
+docker run -d --name=db postgres
+```
+
+Next we will start with the application services, FE instance i.e the instance of the voting app image.
+
+```shell
+docker run -d --name=vote -p 5000:80 voting-app
+```
+
+Next we will deploy the part of the application which shows the result.
+
+```shell
+docker run -d --name=result -p 5001:80 result-app
+```
+
+Finally we deploy the worker by running an instance of the worker image.
+
+```shell
+docker run -d --name=worker worker
+```
+
+But even after running all these containers successfully, we will see errors because these containers are not linked.
+That is where we use links. It is a command line software which can be used to link to containers together.
+In the voting application we can see that the vote application is dependent on the redis container as in the following code snippet.
+
+```python
+
+def get_redis():
+    if not hasattr(g, 'redis'):
+        g.redis = Redis(host="redis", db=0, socket_timeout=5)
+    return g.redis
+```
+
+To make the voting app aware of the redis service, we add a link option to the docker run command:
+
+```shell
+docker run -d --name=vote -p 5000:80 --link redis:redis voting-app
+#                                            [conainer-name]:[name of host that the voting app is looking for]
+```
+
+What this is doing is, that it is creating an entry into the etc/hosts file on the voting app container adding an entry with the host name redis and internal IP of the redis container.
+
+Similarly, we will also have to link the others:
+
+```shell
+docker run -d --name=result -p 5001:80 --link db:db result-app
+docker run -d --name=worker worker --link db:db --link redis:redis worker
+```
+
+Now that we have all the docker run commands ready, we can now generate a docker copose file from it.
+1. We start by creating a dictionary of container names where the keys are the container names itself
+
+```yml
+redis:
+
+db: 
+
+vote:
+
+result:
+
+worker:
+
+```
+
+2. Then we add the image name. They key is the image and the value is the name of the image
+
+```yml
+redis:
+   image: redis
+
+db:
+   image: postgres:9.4
+
+vote:
+   image: voting-app
+
+result:
+   image: result-app
+
+worker:
+   image: worker
+```
+
+3. Next, we inspect the commands and see what are the other options used. As of here, we can see we need to publish the ports and add the links.
+
+```yml
+redis:
+   image: redis
+
+db:
+   image: postgres:9.4
+
+vote:
+   image: voting-app
+   ports:
+      - 5000:80
+   links:
+      - redis
+
+result:
+   image: result-app
+   ports:
+      - 5001:80
+   links:
+      - db
+
+worker:
+   image: worker
+   links:
+      - redis
+      - db
+```
+Now that we are done with our docker compose file, bringing up teh stack is done by:
+
+```shell
+docker-compose up
+```
+
+When we look at this compose file, we are assuming that all images are already built. But that will not always be the case. For building, we can replace the "image" line with a "build" line and specify the location of the directory, which contains the application code and a Dockerfile with instructions to build the docker image.
+
+![Image for docker compose build](DockerComposeBuild1.png)
+
+### Diff Versions of Docker copose files:
+
+1. Version 1
+
+   ![Image for docker compose version 1](dockercomposeversion1.png)
+
+   This version has a number of limitations, like if we wanted to deploy the containers on a diff network other than the default bridged network, there was no option for that. Also, we could not specify the startup order for the services.
+   Support for the above came in the next versions.
+
+2. Version 2
+
+   ![Image for docker compose version 2](dockercomposeversion2.png)
+
+   Here the format of the file also changed, here we no longer specified the stack information directly, all was encapsulated in the services section.
+
+   ```yml
+   services:
+      redis:
+         image: redis
+
+      db:
+         image: postgres:9.4
+
+      vote:
+         image: voting-app
+         ports:
+            - 5000:80
+         links:
+            - redis
+
+      result:
+         image: result-app
+         ports:
+            - 5001:80
+         links:
+            - db
+
+      worker:
+         image: worker
+         links:
+            - redis
+            - db
+   ```
+
+   Also, we can noe specify the version of the file depending on the need. For version 2 and above, it is mandatory.
+   ```yml
+   version 2
+   services:
+      redis:
+         image: redis
+
+      db:
+         image: postgres:9.4
+
+      vote:
+         image: voting-app
+         ports:
+            - 5000:80
+         links:
+            - redis
+
+      result:
+         image: result-app
+         ports:
+            - 5001:80
+         links:
+            - db
+
+      worker:
+         image: worker
+         links:
+            - redis
+            - db
+   ```
+   For version 2, docker compose automatically creates a dedicated bridged network for this application and attcahes all containers to that new network. All containers are then able to communicate with each other using each others's service name, thus removing the requirement of links.
+
+   ```yml
+   version 2
+   services:
+      redis:
+         image: redis
+
+      db:
+         image: postgres:9.4
+
+      vote:
+         image: voting-app
+         ports:
+            - 5000:80
+
+      result:
+         image: result-app
+         ports:
+            - 5001:80
+
+      worker:
+         image: worker
+
+   ```
+
+   This version also introduces the depends on feature i.e a startup order
+
+   ```yml
+   version 2
+   services:
+      redis:
+         image: redis
+
+      db:
+         image: postgres:9.4
+
+      vote:
+         image: voting-app
+         ports:
+            - 5000:80
+         depends_on:
+            - redis
+
+      result:
+         image: result-app
+         ports:
+            - 5001:80
+
+      worker:
+         image: worker
+
+   ```
+
+3. Then comes version 3 which is the latest as of today. It is similar to version 2 in the structure.
+
+   Version 3 comes with the support for docker swarm. There are other changes also there which could be found in the following link.
+
+### Docker compose networks
+
+So far we have been deploying all containers on the default bridged network.
+Now say we now create a frontend network dedicated for traffic from users and a backend network dedicated for traffic within the application. We then connect the voting app and the result app in a frontend network and all the components to an internal backend network.
+
+Now, in the docker compose file, we will have to define the networks that we are going to use and specify like in the following which is going to use what.
+
+```yml
+version 2
+services:
+   redis:
+      image: redis
+      networks:
+         - back-end
+
+   db:
+      image: postgres:9.4
+      networks:
+         - back-end
+
+   vote:
+      image: voting-app
+      ports:
+         - 5000:80
+      depends_on:
+         - redis
+      networks:
+         - back-end
+         - front-end
+
+   result:
+      image: result-app
+      ports:
+         - 5001:80
+      networks:
+         - back-end
+         - front-end
+
+   worker:
+      image: worker
+      networks:
+         - back-end
+
+
+networks:
+   front-end:
+   back-end:
+
+```
+
+
