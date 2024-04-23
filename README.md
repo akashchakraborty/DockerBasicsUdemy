@@ -150,7 +150,7 @@ docker run hello-world
 
 11. rm - This will remove the conatiners from the host, given they are not running
    eg. ```docker rm <container id>```
-   eg. ```docker rmi $(docker ps -a -q)``` -- Removes all the non runnning containers.
+   eg. ```docker rm $(docker ps -a -q)``` -- Removes all the non runnning containers.
 
 * Say we wanted to run a docker container from an ubuntu image:
 
